@@ -8,7 +8,7 @@ const fuse = new Fuse(characters, {
   threshold: 0.4,
 });
 
-let page = 0;
+const userPages = new Map();
 
 function handleStart(ctx) {
   const name = ctx.from.first_name || "دوست عزیز";
@@ -22,36 +22,53 @@ function handleStart(ctx) {
     reply_markup: {
       keyboard: [
         [{ text: "پیشنهاد شخصیت" }, { text: "شخصیت‌ها" }],
-        [
-          {
-            text: "خرید اشتراک",
-          },
-          { text: "راهنمای ربات" },
-        ],
+        [{ text: "خرید اشتراک" }, { text: "راهنمای ربات" }],
       ],
       resize_keyboard: true,
     },
   });
 
-  page = 0;
+  userPages.set(ctx.from.id, 0);
+}
+
+function showCharactersPage(ctx, page) {
+  const userId = ctx.from.id;
+  const currentCharacters = characters.slice(page * 9, (page + 1) * 9);
+  if (currentCharacters.length > 0) {
+    const buttons = chunk(currentCharacters, 3);
+    buttons.push(["شخصیت های دیگر"]);
+    if (page > 0) buttons.push(["بازگشت"]);
+    buttons.push(["منو اصلی"]);
+
+    ctx.reply("لیست شخصیت‌ها:", Markup.keyboard(buttons).resize());
+    userPages.set(userId, page);
+  } else {
+    ctx.reply("دیگه شخصیتی برای نمایش وجود نداره.");
+  }
 }
 
 function onShowMoreCharacters(ctx) {
-  page += 1;
-  const nextCharacters = characters.slice(page * 9, (page + 1) * 9);
+  const userId = ctx.from.id;
+  const currentPage = userPages.get(userId) || 0;
+  const nextPage = currentPage + 1;
+  const nextCharacters = characters.slice(nextPage * 9, (nextPage + 1) * 9);
+
   if (nextCharacters.length > 0) {
-    const buttons = chunk(nextCharacters, 3);
-
-    buttons.push(["شخصیت های دیگر"]);
-    buttons.push(["بازگشت", "منو اصلی"]);
-
-    ctx.reply("شخصیت‌های بیشتر:", Markup.keyboard(buttons).resize().oneTime());
+    showCharactersPage(ctx, nextPage);
   } else {
-    const buttons = [["بازگشت", "منو اصلی"]];
-    ctx.reply(
-      "دیگه شخصیتی برای نمایش وجود نداره.",
-      Markup.keyboard(buttons).resize().oneTime()
-    );
+    ctx.reply("شخصیت جدیدی برای نمایش وجود نداره.");
+  }
+}
+
+function onPreviousCharacters(ctx) {
+  const userId = ctx.from.id;
+  const currentPage = userPages.get(userId) || 0;
+
+  if (currentPage > 0) {
+    showCharactersPage(ctx, currentPage - 1);
+  } else {
+    ctx.reply("شما در صفحه اول هستید.");
+    showCharactersPage(ctx, 0);
   }
 }
 
@@ -66,30 +83,7 @@ function onShowMainMenu(ctx) {
     },
   });
 
-  page = 0;
-}
-
-function onPreviousCharacters(ctx) {
-  if (page === 1) {
-    page = 0;
-    onShowMainMenu(ctx);
-    return;
-  }
-
-  if (page > 1) {
-    page -= 1;
-    const prevCharacters = characters.slice(page * 9, (page + 1) * 9);
-    const buttons = chunk(prevCharacters, 3);
-    buttons.push(["بازگشت", "منو اصلی"]);
-    buttons.push(["شخصیت های دیگر", "بازگشت", "منو اصلی"]);
-
-    ctx.reply(
-      "بازگشت به شخصیت‌های قبلی:",
-      Markup.keyboard(buttons).resize().oneTime()
-    );
-  } else {
-    onShowMainMenu(ctx);
-  }
+  userPages.set(ctx.from.id, 0);
 }
 
 function onHelpCommand(ctx) {
@@ -102,7 +96,7 @@ function onHelpCommand(ctx) {
 🔹 شخصیت‌ها: لیستی از شخصیت‌های موجود رو بهت نشون می‌ده. می‌تونی یکی رو انتخاب کنی و سوالتو بپرسی.
 🔹 پیشنهاد شخصیت: اگه شخصیتی مد نظرت بود که تو لیست نیست، می‌تونی بهمون پیشنهاد بدی.
 🔹 خرید اشتراک: برای دسترسی بیشتر یا سریع‌تر می‌تونی اشتراک بگیری.
-🔹 راهنمای ربات: همین بخشه که الان داخلش هستی 😊
+🔹 راهنمای ربات: همین بخشه که الان داخلش هستی
 
 📌 نکات مهم:
 - برای برگشت از لیست شخصیت‌ها می‌تونی از دکمه "بازگشت" استفاده کنی.
@@ -123,9 +117,17 @@ function onHelpCommand(ctx) {
 
 function onMainSelection(ctx) {
   const text = ctx.message.text;
+  const userId = ctx.from.id;
+
+  if (characters.includes(text)) {
+    ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`);
+    return;
+  }
 
   switch (text) {
     case "شخصیت‌ها":
+      return showCharactersPage(ctx, 0);
+    case "شخصیت های دیگر":
       return onShowMoreCharacters(ctx);
     case "پیشنهاد شخصیت":
       return ctx.reply(
@@ -139,7 +141,6 @@ function onMainSelection(ctx) {
       return onHelpCommand(ctx);
     case "بازگشت":
       return onPreviousCharacters(ctx);
-
     case "منو اصلی":
       return onShowMainMenu(ctx);
     default:
@@ -181,4 +182,6 @@ module.exports = {
   onWriteCharacters,
   onMainSelection,
   onHelpCommand,
+  onPreviousCharacters,
+  onShowMainMenu,
 };
