@@ -6,6 +6,7 @@ const {
   handleStart,
   onShowMoreCharacters,
   onWriteCharacters,
+  onMainSelection,
 } = require("./app/handlers/botHandlers");
 
 // Initialize bot
@@ -15,6 +16,8 @@ const ADMIN_ID = process.env.MY_TELEGRAM_ID;
 // Register handlers
 bot.start(handleStart);
 bot.hears("شخصیت های دیگر", onShowMoreCharacters);
+bot.hears("/personas", onShowMoreCharacters);
+bot.hears(/.*/, onMainSelection);
 bot.on("text", onWriteCharacters);
 
 characters.forEach((name) => {
