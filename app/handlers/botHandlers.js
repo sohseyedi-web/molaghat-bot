@@ -115,15 +115,16 @@ function onHelpCommand(ctx) {
   });
 }
 
-function onMainSelection(ctx) {
-  const text = ctx.message.text;
-  const userId = ctx.from.id;
+function onCharacterSelection(ctx, text) {
+  ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`, {
+    reply_markup: {
+      keyboard: [[{ text: "بازگشت" }, { text: "ساخت استوری" }]],
+      resize_keyboard: true,
+    },
+  });
+}
 
-  if (characters.includes(text)) {
-    ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`);
-    return;
-  }
-
+function onMenuSelection(ctx, text) {
   switch (text) {
     case "شخصیت‌ها":
       return showCharactersPage(ctx, 0);
@@ -143,6 +144,8 @@ function onMainSelection(ctx) {
       return onPreviousCharacters(ctx);
     case "منو اصلی":
       return onShowMainMenu(ctx);
+    case "ساخت استوری":
+      return onShareSubscription(ctx); // <- بعداً این می‌شه Story Maker
     default:
       return ctx.reply(
         "دستور نامشخصه. لطفاً یکی از گزینه‌های منو رو انتخاب کن."
@@ -150,6 +153,33 @@ function onMainSelection(ctx) {
   }
 }
 
+function onMainSelection(ctx) {
+  const text = ctx.message.text.trim();
+  const userId = ctx.from.id;
+
+  if (characters.includes(text)) {
+    return onCharacterSelection(ctx, text);
+  }
+
+  const result = fuse.search(text);
+  if (result.length > 0) {
+    const suggested = result.slice(0, 4).map((r) => r.item);
+    return ctx.reply(
+      `شخصیت‌های مشابه با «${text}» رو پیدا کردم 👇 لطفاً یکی رو انتخاب کن:`,
+      {
+        reply_markup: {
+          keyboard: [
+            ...suggested.map((name) => [{ text: name }]),
+            [{ text: "بازگشت" }],
+          ],
+          resize_keyboard: true,
+        },
+      }
+    );
+  }
+
+  return onMenuSelection(ctx, text);
+}
 function onWriteCharacters(ctx) {
   const input = ctx.message.text.trim();
 
