@@ -118,7 +118,7 @@ function onHelpCommand(ctx) {
 function onCharacterSelection(ctx, text) {
   ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`, {
     reply_markup: {
-      keyboard: [[{ text: "بازگشت" }, { text: "ساخت استوری" }]],
+      keyboard: [[{ text: "بازگشت" }]],
       resize_keyboard: true,
     },
   });
@@ -144,8 +144,6 @@ function onMenuSelection(ctx, text) {
       return onPreviousCharacters(ctx);
     case "منو اصلی":
       return onShowMainMenu(ctx);
-    case "ساخت استوری":
-      return onShareSubscription(ctx); // <- بعداً این می‌شه Story Maker
     default:
       return ctx.reply(
         "دستور نامشخصه. لطفاً یکی از گزینه‌های منو رو انتخاب کن."
