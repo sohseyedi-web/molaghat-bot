@@ -10,6 +10,7 @@ const {
   onHelpCommand,
   onShowMainMenu,
   onPreviousCharacters,
+  handleMessage,
 } = require("./app/handlers/botHandlers");
 
 // Initialize bot
@@ -23,23 +24,15 @@ bot.start(handleStart);
 bot.hears("شخصیت های دیگر", onShowMoreCharacters);
 bot.hears("/personas", onShowMoreCharacters);
 bot.command("help", onHelpCommand);
-bot.hears(/.*/, onMainSelection);
 bot.hears("بازگشت", onPreviousCharacters);
 bot.hears("منو اصلی", onShowMainMenu);
-bot.on("text", (ctx) => {
-  if (characters.includes(ctx.message.text)) {
-    ctx.reply(`تو انتخاب کردی: ${ctx.message.text} ✅\nحالا سوالت رو بپرس.`);
-  } else {
-    onMainSelection(ctx);
-    onWriteCharacters(ctx);
-  }
-});
+bot.hears("شخصیت‌ها", (ctx) => onMainSelection(ctx));
+bot.hears("پیشنهاد شخصیت", (ctx) => onMainSelection(ctx));
+bot.hears("خرید اشتراک", (ctx) => onMainSelection(ctx));
+bot.hears("راهنمای ربات", (ctx) => onMainSelection(ctx));
 
-characters.forEach((name) => {
-  bot.hears(name, (ctx) => {
-    ctx.reply(`تو انتخاب کردی: ${name} ✅\nحالا سوالت رو از ${name} بپرس.`);
-  });
-});
+// Use character selection and message handling
+bot.on("text", handleMessage);
 
 // Start bot
 bot.launch();
