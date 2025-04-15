@@ -22,7 +22,7 @@
 
 1. مخزن را کلون کنید:
 ```
-git clone https://github.com/yourusername/molaghat-bot.git
+git clone https://github.com/sohseyedi-web/molaghat-bot.git
 cd molaghat-bot
 ```
 
