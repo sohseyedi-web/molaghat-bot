@@ -217,7 +217,7 @@ async function handleMessage(ctx) {
 
   if (character && text !== "بازگشت") {
     const loadingMessage = await ctx.reply(
-      "در حال دریافت پاسخ از " + character + "..."
+      `${character}به سوالت داره فکر میکنه...`
     );
 
     try {
