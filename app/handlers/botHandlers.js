@@ -2,13 +2,16 @@ const Fuse = require("fuse.js");
 const { Markup } = require("telegraf");
 const characters = require("../constant/characters");
 const { chunk } = require("../utils/functions");
+const { getCharacterReply } = require("../utils/openClient");
 
 const fuse = new Fuse(characters, {
   includeScore: true,
   threshold: 0.4,
+  keys: ["name"],
 });
 
 const userPages = new Map();
+const userConversations = new Map();
 
 function handleStart(ctx) {
   const name = ctx.from.first_name || "دوست عزیز";
@@ -34,8 +37,10 @@ function handleStart(ctx) {
 function showCharactersPage(ctx, page) {
   const userId = ctx.from.id;
   const currentCharacters = characters.slice(page * 9, (page + 1) * 9);
+
   if (currentCharacters.length > 0) {
-    const buttons = chunk(currentCharacters, 3);
+    const names = currentCharacters.map((c) => c.name);
+    const buttons = chunk(names, 3);
     buttons.push(["شخصیت های دیگر"]);
     if (page > 0) buttons.push(["بازگشت"]);
     buttons.push(["منو اصلی"]);
@@ -93,19 +98,16 @@ function onHelpCommand(ctx) {
 این ربات بهت کمک می‌کنه با شخصیت‌های معروف (تاریخی، علمی، هنری و...) گفت‌وگو کنی.
 
 ✅ منو اصلی شامل گزینه‌های زیره:
-🔹 شخصیت‌ها: لیستی از شخصیت‌های موجود رو بهت نشون می‌ده. می‌تونی یکی رو انتخاب کنی و سوالتو بپرسی.
+🔹 شخصیت‌ها: لیستی از شخصیت‌های موجود رو بهت نشون می‌ده.
 🔹 پیشنهاد شخصیت: اگه شخصیتی مد نظرت بود که تو لیست نیست، می‌تونی بهمون پیشنهاد بدی.
 🔹 خرید اشتراک: برای دسترسی بیشتر یا سریع‌تر می‌تونی اشتراک بگیری.
 🔹 راهنمای ربات: همین بخشه که الان داخلش هستی
 
 📌 نکات مهم:
-- برای برگشت از لیست شخصیت‌ها می‌تونی از دکمه "بازگشت" استفاده کنی.
 - دکمه "منو اصلی" همیشه تو رو به منوی اول برمی‌گردونه.
 - اگه اسم شخصیتی رو نوشتی که دقیق پیدا نشد، سیستم سعی می‌کنه حدس بزنه منظورت کیه.
 
 🤖 هر زمان خواستی، با نوشتن دستور /help این راهنما رو دوباره ببین.
-
-پیشنهاداتت رو هم با کمال میل می‌شنویم!
   `;
   ctx.reply(helpText, {
     reply_markup: {
@@ -116,6 +118,9 @@ function onHelpCommand(ctx) {
 }
 
 function onCharacterSelection(ctx, text) {
+  const userId = ctx.from.id;
+  userConversations.set(userId, text);
+
   ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`, {
     reply_markup: {
       keyboard: [[{ text: "بازگشت" }]],
@@ -131,9 +136,7 @@ function onMenuSelection(ctx, text) {
     case "شخصیت های دیگر":
       return onShowMoreCharacters(ctx);
     case "پیشنهاد شخصیت":
-      return ctx.reply(
-        "شما می‌تونید شخصیت پیشنهادی خودتون رو برامون ارسال کنید. 😊"
-      );
+      return ctx.reply("شخصیت پیشنهادی‌تون رو برامون ارسال کنید. 😊");
     case "خرید اشتراک":
       return ctx.reply(
         "برای خرید اشتراک لطفاً به لینک زیر مراجعه کنید:\nhttps://example.com"
@@ -155,13 +158,14 @@ function onMainSelection(ctx) {
   const text = ctx.message.text.trim();
   const userId = ctx.from.id;
 
-  if (characters.includes(text)) {
+  const character = characters.find((c) => c.name === text);
+  if (character) {
     return onCharacterSelection(ctx, text);
   }
 
   const result = fuse.search(text);
   if (result.length > 0) {
-    const suggested = result.slice(0, 4).map((r) => r.item);
+    const suggested = result.slice(0, 4).map((r) => r.item.name);
     return ctx.reply(
       `شخصیت‌های مشابه با «${text}» رو پیدا کردم 👇 لطفاً یکی رو انتخاب کن:`,
       {
@@ -178,13 +182,14 @@ function onMainSelection(ctx) {
 
   return onMenuSelection(ctx, text);
 }
+
 function onWriteCharacters(ctx) {
   const input = ctx.message.text.trim();
 
-  const exactMatch = characters.find((c) => c === input);
-  if (exactMatch) {
+  const match = characters.find((c) => c.name === input);
+  if (match) {
     ctx.reply(
-      `شما شخصیت "${exactMatch}" رو انتخاب کردید! حالا می‌تونی سوالت رو بپرسی `
+      `شما شخصیت "${match.name}" رو انتخاب کردید! حالا می‌تونی سوالت رو بپرسی`
     );
     return;
   }
@@ -195,13 +200,45 @@ function onWriteCharacters(ctx) {
     return;
   }
 
-  const suggestions = results.slice(0, 4).map((result) => result.item);
+  const suggestions = results.slice(0, 4).map((result) => result.item.name);
   ctx.reply(
     "آیا منظور شما یکی از این شخصیت‌هاست؟",
     Markup.keyboard(suggestions.map((item) => [item]))
       .oneTime()
       .resize()
   );
+}
+
+async function handleMessage(ctx) {
+  const userId = ctx.from.id;
+  const text = ctx.message.text.trim();
+
+  const character = userConversations.get(userId);
+
+  if (character && text !== "بازگشت") {
+    const loadingMessage = await ctx.reply(
+      "در حال دریافت پاسخ از " + character + "..."
+    );
+
+    try {
+      const answer = await getCharacterReply(character, text);
+      await ctx.deleteMessage(loadingMessage.message_id);
+      await ctx.reply(answer);
+    } catch (err) {
+      console.error(err);
+      await ctx.deleteMessage(loadingMessage.message_id);
+      ctx.reply("❌ مشکلی پیش اومد. لطفاً دوباره تلاش کن.");
+    }
+
+    return;
+  }
+
+  if (text === "بازگشت") {
+    userConversations.delete(userId);
+    return onShowMainMenu(ctx);
+  }
+
+  return onMainSelection(ctx);
 }
 
 module.exports = {
@@ -212,4 +249,5 @@ module.exports = {
   onHelpCommand,
   onPreviousCharacters,
   onShowMainMenu,
+  handleMessage,
 };
