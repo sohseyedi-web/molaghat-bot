@@ -1,7 +1,11 @@
 const Fuse = require("fuse.js");
 const { Markup } = require("telegraf");
 const characters = require("../constant/characters");
-const { chunk } = require("../utils/functions");
+const {
+  chunk,
+  isPersianText,
+  containsProfanity,
+} = require("../utils/functions");
 const { getCharacterReply } = require("../utils/openClient");
 
 const fuse = new Fuse(characters, {
@@ -334,11 +338,34 @@ async function handleMessage(ctx) {
     return onShowMainMenu(ctx);
   }
 
+  // Check if the message is in Persian
+  if (text !== "بازگشت" && !isPersianText(text)) {
+    return ctx.reply("لطفا به زبان فارسی بنویسید.", {
+      reply_markup: {
+        keyboard: [[{ text: "بازگشت" }]],
+        resize_keyboard: true,
+      },
+    });
+  }
+
+  // Check for profanity in message
+  if (containsProfanity(text)) {
+    return ctx.reply(
+      "استفاده از کلمات نامناسب مجاز نیست. لطفا از ادبیات مناسب استفاده کنید.",
+      {
+        reply_markup: {
+          keyboard: [[{ text: "بازگشت" }]],
+          resize_keyboard: true,
+        },
+      }
+    );
+  }
+
   const character = userConversations.get(userId);
 
   if (character && text !== "بازگشت") {
     const loadingMessage = await ctx.reply(
-      `${character}به سوالت داره فکر میکنه...`
+      `${character} به سوالت داره فکر میکنه ...`
     );
 
     try {
