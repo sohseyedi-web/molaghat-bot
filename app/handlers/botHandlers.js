@@ -18,6 +18,12 @@ const userPages = new Map();
 const userConversations = new Map();
 const allUsers = new Map();
 const broadcastMode = new Map();
+// Track user cooldowns and cooldown messages
+const userCooldowns = new Map();
+const cooldownMessages = new Map();
+
+// Cooldown duration in milliseconds (60 minutes)
+const COOLDOWN_DURATION = 60 * 60 * 1000;
 
 function handleStart(ctx) {
   const name = ctx.from.first_name || "دوست عزیز";
@@ -166,6 +172,50 @@ function onHelpCommand(ctx) {
 
 function onCharacterSelection(ctx, text) {
   const userId = ctx.from.id;
+
+  // Check if user is on cooldown (except for admin)
+  if (
+    userId.toString() !== process.env.MY_TELEGRAM_ID &&
+    userCooldowns.has(userId)
+  ) {
+    const cooldownEnd = userCooldowns.get(userId);
+    const remainingTime = cooldownEnd - Date.now();
+
+    if (remainingTime > 0) {
+      // Calculate remaining minutes and seconds
+      const remainingMinutes = Math.floor(remainingTime / 60000);
+      const remainingSeconds = Math.floor((remainingTime % 60000) / 1000);
+
+      ctx.reply(
+        `شما باید ${remainingMinutes} دقیقه و ${remainingSeconds} ثانیه دیگر صبر کنید تا بتوانید سوال بعدی را بپرسید.`,
+        {
+          reply_markup: {
+            keyboard: [[{ text: "بازگشت" }]],
+            resize_keyboard: true,
+          },
+        }
+      );
+      return;
+    } else {
+      // Cooldown expired, clear it
+      userCooldowns.delete(userId);
+
+      // Delete the cooldown message if it exists
+      if (cooldownMessages.has(userId)) {
+        try {
+          ctx.telegram
+            .deleteMessage(userId, cooldownMessages.get(userId))
+            .catch((err) =>
+              console.error("Failed to delete cooldown message:", err.message)
+            );
+        } catch (err) {
+          console.error("Failed to delete cooldown message:", err.message);
+        }
+        cooldownMessages.delete(userId);
+      }
+    }
+  }
+
   userConversations.set(userId, text);
 
   ctx.reply(`تو انتخاب کردی: ${text} ✅\nحالا سوالت رو از ${text} بپرس.`, {
@@ -364,6 +414,48 @@ async function handleMessage(ctx) {
   const character = userConversations.get(userId);
 
   if (character && text !== "بازگشت") {
+    // Check if user is on cooldown (except for admin)
+    if (
+      userId.toString() !== process.env.MY_TELEGRAM_ID &&
+      userCooldowns.has(userId)
+    ) {
+      const cooldownEnd = userCooldowns.get(userId);
+      const remainingTime = cooldownEnd - Date.now();
+
+      if (remainingTime > 0) {
+        // Calculate remaining minutes and seconds
+        const remainingMinutes = Math.floor(remainingTime / 60000);
+        const remainingSeconds = Math.floor((remainingTime % 60000) / 1000);
+
+        ctx.reply(
+          `شما باید ${remainingMinutes} دقیقه و ${remainingSeconds} ثانیه دیگر صبر کنید تا بتوانید سوال بعدی را بپرسید.`,
+          {
+            reply_markup: {
+              keyboard: [[{ text: "بازگشت" }]],
+              resize_keyboard: true,
+            },
+          }
+        );
+        return;
+      } else {
+        // Cooldown expired, clear it
+        userCooldowns.delete(userId);
+
+        // Delete the cooldown message if it exists
+        if (cooldownMessages.has(userId)) {
+          try {
+            await ctx.telegram.deleteMessage(
+              userId,
+              cooldownMessages.get(userId)
+            );
+          } catch (err) {
+            console.error("Failed to delete cooldown message:", err.message);
+          }
+          cooldownMessages.delete(userId);
+        }
+      }
+    }
+
     const loadingMessage = await ctx.reply(
       `${character} به سوالت داره فکر میکنه ...`
     );
@@ -372,6 +464,39 @@ async function handleMessage(ctx) {
       const answer = await getCharacterReply(character, text);
       await ctx.deleteMessage(loadingMessage.message_id);
       await ctx.reply(answer);
+
+      // Add a timeout to return to main menu after 10 seconds (but not for admin)
+      if (userId.toString() !== process.env.MY_TELEGRAM_ID) {
+        // Set cooldown for user
+        const cooldownEnd = Date.now() + COOLDOWN_DURATION;
+        userCooldowns.set(userId, cooldownEnd);
+
+        setTimeout(async () => {
+          const cooldownMsg = await ctx.reply(
+            "تا سوال بعدی رو میتونی 60 دقیقه دیگر بپرسی."
+          );
+          cooldownMessages.set(userId, cooldownMsg.message_id);
+          onShowMainMenu(ctx);
+
+          // Set a timeout to delete the cooldown message after 60 minutes
+          setTimeout(async () => {
+            if (cooldownMessages.has(userId)) {
+              try {
+                await ctx.telegram.deleteMessage(
+                  userId,
+                  cooldownMessages.get(userId)
+                );
+              } catch (err) {
+                console.error(
+                  "Failed to delete cooldown message:",
+                  err.message
+                );
+              }
+              cooldownMessages.delete(userId);
+            }
+          }, COOLDOWN_DURATION);
+        }, 3000); // 3 seconds
+      }
     } catch (err) {
       console.error(err);
       await ctx.deleteMessage(loadingMessage.message_id);
